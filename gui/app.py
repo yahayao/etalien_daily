@@ -120,6 +120,12 @@ def _check_webview2_runtime() -> bool:
 # ── 主入口 ───────────────────────────────────────────────────────
 
 def main() -> None:
+    # --service 模式：作为 Windows 服务运行（必须在 --cli 之前判断）
+    if "--service" in sys.argv:
+        from etalien.service_wrapper import run_service
+        run_service()
+        return
+
     # --cli 转发
     if "--cli" in sys.argv:
         _run_cli()

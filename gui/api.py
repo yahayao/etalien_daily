@@ -353,21 +353,18 @@ def create_app() -> Flask:
         """创建或更新 Windows 计划任务。"""
         try:
             cmd = _get_schtask_cmd()
-            subprocess.run([
+            _sc_run([
                 "schtasks", "/create", "/tn", TASK_NAME,
                 "/tr", cmd,
                 "/sc", "daily", "/st", schedule_time, "/f",
-            ], capture_output=True, text=True, check=True)
+            ], check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
 
     def _remove_schtask() -> None:
         """删除 Windows 计划任务。"""
         try:
-            subprocess.run(
-                ["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
-                capture_output=True, text=True,
-            )
+            _sc_run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"])
         except FileNotFoundError:
             pass
 
@@ -431,20 +428,14 @@ def create_app() -> Flask:
 
         # 检查 schtasks
         try:
-            r = subprocess.run(
-                ["schtasks", "/query", "/tn", TASK_NAME],
-                capture_output=True, text=True,
-            )
+            r = _sc_run(["schtasks", "/query", "/tn", TASK_NAME])
             result["schtasks"] = r.returncode == 0
         except FileNotFoundError:
             pass
 
         # 检查 Windows Service
         try:
-            r = subprocess.run(
-                ["sc", "query", SERVICE_NAME],
-                capture_output=True, text=True,
-            )
+            r = _sc_run(["sc", "query", SERVICE_NAME])
             if r.returncode == 0:
                 result["service_installed"] = True
                 result["service_running"] = "RUNNING" in r.stdout
@@ -454,6 +445,15 @@ def create_app() -> Flask:
         return jsonify(result)
 
     # ── Windows Service 安装/卸载 ──────────────────────────
+
+    def _sc_run(args: list, timeout: int = 30, check: bool = False) -> subprocess.CompletedProcess:
+        """执行外部命令，Windows 下隐藏窗口。"""
+        kwargs = dict(capture_output=True, text=True, timeout=timeout)
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        if check:
+            return subprocess.run(args, **kwargs, check=True)
+        return subprocess.run(args, **kwargs)
 
     @app.route("/api/schedule/install-service", methods=["POST"])
     def install_service():
@@ -466,41 +466,46 @@ def create_app() -> Flask:
             }), 400
 
         try:
-            # 先检查是否已安装
-            r = subprocess.run(
-                ["sc", "query", SERVICE_NAME],
-                capture_output=True, text=True,
-            )
+            # 先检查是否已安装，若是则停止并删除旧服务
+            r = _sc_run(["sc", "query", SERVICE_NAME])
             if r.returncode == 0:
-                # 已安装，先停止再删除
-                subprocess.run(
-                    ["sc", "stop", SERVICE_NAME],
-                    capture_output=True, text=True,
-                )
-                subprocess.run(
-                    ["sc", "delete", SERVICE_NAME],
-                    capture_output=True, text=True,
-                )
+                _sc_run(["sc", "stop", SERVICE_NAME])
+                r_del = _sc_run(["sc", "delete", SERVICE_NAME])
+                if r_del.returncode != 0:
+                    return jsonify({"error": "删除旧服务失败: " + r_del.stderr.strip()}), 500
                 import time
                 time.sleep(1)
 
-            result = subprocess.run([
+            # 创建服务
+            r_create = _sc_run([
                 "sc", "create", SERVICE_NAME,
                 "binPath=", f'"{exe_path}" --service',
                 "start=", "auto",
                 "DisplayName=", "ET Alien Daily Claim Service",
-            ], capture_output=True, text=True)
-
-            if result.returncode != 0:
-                return jsonify({"error": result.stderr.strip()}), 500
+            ])
+            if r_create.returncode != 0:
+                err = r_create.stderr.strip() or r_create.stdout.strip() or "未知错误"
+                return jsonify({"error": "服务创建失败: " + err}), 500
 
             # 启动服务
-            subprocess.run(
-                ["sc", "start", SERVICE_NAME],
-                capture_output=True, text=True,
+            r_start = _sc_run(["sc", "start", SERVICE_NAME])
+            if r_start.returncode != 0:
+                err = r_start.stderr.strip() or r_start.stdout.strip() or "未知错误"
+                return jsonify({"error": "服务启动失败: " + err}), 500
+
+            # 同步设置：启用定时 + 服务模式
+            settings = get_settings()
+            update_settings(
+                schedule_enabled=True,
+                schedule_method="service",
+                schedule_time=settings.get("schedule_time", "08:00"),
             )
+            # 删除旧的 schtasks 避免重复执行
+            _remove_schtask()
 
             return jsonify({"ok": True})
+        except subprocess.TimeoutExpired:
+            return jsonify({"error": "服务操作超时"}), 500
         except FileNotFoundError:
             return jsonify({"error": "sc 不可用（非 Windows 系统）"}), 500
 
@@ -508,16 +513,19 @@ def create_app() -> Flask:
     def uninstall_service():
         """卸载 Windows 服务。"""
         try:
-            subprocess.run(
-                ["sc", "stop", SERVICE_NAME],
-                capture_output=True, text=True,
-            )
-            result = subprocess.run(
-                ["sc", "delete", SERVICE_NAME],
-                capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                return jsonify({"error": result.stderr.strip()}), 500
+            _sc_run(["sc", "stop", SERVICE_NAME])
+            r_del = _sc_run(["sc", "delete", SERVICE_NAME])
+            if r_del.returncode != 0:
+                err = r_del.stderr.strip() or r_del.stdout.strip() or "未知错误"
+                # 如果服务本来就不存在，也算成功
+                if "1060" in err or "not exist" in err.lower():
+                    pass
+                else:
+                    return jsonify({"error": "服务删除失败: " + err}), 500
+
+            # 重置设置：回退到 schtasks 模式
+            update_settings(schedule_enabled=False, schedule_method="schtasks")
+
             return jsonify({"ok": True})
         except FileNotFoundError:
             return jsonify({"ok": True})

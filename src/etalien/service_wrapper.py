@@ -23,6 +23,7 @@ SERVICE_ACCEPT_STOP = 0x00000001
 SERVICE_ACCEPT_SHUTDOWN = 0x00000004
 SERVICE_RUNNING = 0x00000004
 SERVICE_STOPPED = 0x00000001
+SERVICE_START_PENDING = 0x00000002
 SERVICE_STOP_PENDING = 0x00000003
 
 SERVICE_CONTROL_STOP = 0x00000001
@@ -67,7 +68,7 @@ HandlerExProc = ctypes.WINFUNCTYPE(
 ServiceMainProc = ctypes.WINFUNCTYPE(
     None,
     wintypes.DWORD,  # dwNumServicesArgs
-    wintypes.LPWSTR,  # lpServiceArgVectors
+    ctypes.POINTER(wintypes.LPWSTR),  # lpServiceArgVectors
 )
 
 # ── 全局状态 ────────────────────────────────────────────────────────
@@ -193,6 +194,9 @@ def _service_worker() -> None:
 def _service_main(_argc: int, _argv) -> None:
     global _status_handle, _stop_event
 
+    # 报告启动中（避免 1053 超时）
+    _report_status(SERVICE_START_PENDING, wait_hint=3000)
+
     # 注册控制处理器
     _status_handle = ctypes.windll.advapi32.RegisterServiceCtrlHandlerExW(
         "EtAlienDaily",
@@ -201,12 +205,14 @@ def _service_main(_argc: int, _argv) -> None:
     )
     if not _status_handle:
         logger.error("RegisterServiceCtrlHandlerExW 失败")
+        _report_status(SERVICE_STOPPED, exit_code=1)
         return
 
     # 创建停止事件
     _stop_event = ctypes.windll.kernel32.CreateEventW(None, True, False, None)
     if not _stop_event:
         logger.error("CreateEventW 失败")
+        _report_status(SERVICE_STOPPED, exit_code=1)
         return
 
     # 报告运行中
