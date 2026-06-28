@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>外星仔加速器</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- 闪屏 -->
+<div id="splash">
+  <div class="splash-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="13" r="7"/><ellipse cx="9" cy="11" rx="1.5" ry="2.5"/><ellipse cx="15" cy="11" rx="1.5" ry="2.5"/><path d="M12 6V3" stroke-linecap="round"/><circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/></svg>
+  </div>
+  <div class="splash-bar-wrap"><div class="splash-bar"></div></div>
+</div>
+
+<div id="app">
+  <!-- 标题栏 -->
+  <div id="titlebar">
+    <div class="titlebar-drag">
+      <span class="titlebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="13" r="7"/><ellipse cx="9" cy="11" rx="1.5" ry="2.5"/><ellipse cx="15" cy="11" rx="1.5" ry="2.5"/><path d="M12 6V3" stroke-linecap="round"/><circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/></svg></span>
+      <span class="titlebar-text">外星仔加速器</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="tb-btn" onclick="showSettings()" title="设置"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.3v1.2M8 13.5v1.2M3.2 3.2l.8.8M12 12l.8.8M1.3 8h1.2M13.5 8h1.2M3.2 12.8l.8-.8M12 4l.8-.8"/></svg></button>
+      <button class="tb-btn" onclick="showHistory()" title="历史"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5v3.5l2.5 1.5"/></svg></button>
+      <button class="tb-btn tb-close" onclick="windowMinimize()" title="最小化"><svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      <button class="tb-btn tb-max" onclick="windowMaximize()" title="最大化"><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="0" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+      <button class="tb-btn tb-close-btn" onclick="windowClose()" title="关闭"><svg viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </div>
+  </div>
+
+  <!-- 主内容 -->
+  <main>
+    <!-- 统计栏 -->
+    <div id="stats-bar">
+      <span class="hint">账号 <strong id="stat-total" style="color:var(--amber)">0</strong></span>
+      <span class="stat-sep">·</span>
+      <span class="hint">已启用 <strong id="stat-enabled" style="color:var(--sage)">0</strong></span>
+    </div>
+
+    <!-- 操作栏 -->
+    <div class="action-bar">
+      <button id="btn-claim-start" class="btn-primary claim-action-btn" onclick="startClaim()">开始领取</button>
+      <button class="btn-secondary" onclick="refreshStatus()">刷新状态</button>
+      <span class="spacer"></span>
+      <button class="btn-small btn-primary" onclick="showAddDialog()">+ 添加账号</button>
+    </div>
+
+    <!-- 账号区 -->
+    <section id="accounts-section">
+      <div class="section-label">账号</div>
+      <div id="account-strip" class="account-strip"></div>
+    </section>
+
+    <!-- 领取进度 + 结果 -->
+    <section id="claim-section">
+      <div id="claim-progress" class="cards"></div>
+      <div id="claim-results" class="cards hidden"></div>
+    </section>
+  </main>
+</div>
+
+<!-- 账号编辑弹窗 -->
+<div id="dlg-account" class="modal-overlay hidden">
+  <div class="modal-content">
+    <h3 id="dlg-title">添加账号</h3>
+    <input type="hidden" id="dlg-old-phone">
+    <label>手机号 <input id="dlg-phone" type="text" placeholder="13800138000"></label>
+    <label>备注名 <input id="dlg-name" type="text" placeholder="可选"></label>
+    <label>备注 <input id="dlg-remark" type="text" placeholder="可选"></label>
+    <div class="dlg-buttons">
+      <button class="btn-primary" id="btn-dlg-save">保存</button>
+      <button class="btn-secondary" onclick="closeModal('dlg-account')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div id="dlg-login" class="modal-overlay hidden">
+  <div class="modal-content">
+    <h3>登录 <span id="dlg-login-phone"></span></h3>
+    <div id="dlg-login-send"><button class="btn-primary" onclick="sendLoginCode()">发送验证码</button><button class="btn-secondary" style="margin-left:8px" onclick="closeModal('dlg-login')">取消</button></div>
+    <div id="dlg-login-verify" class="hidden">
+      <label>验证码 <input id="dlg-login-code" type="text" placeholder="输入短信验证码" maxlength="6"></label>
+      <div class="dlg-buttons">
+        <button class="btn-primary" onclick="verifyLoginCode()">登录</button>
+        <button class="btn-secondary" onclick="closeModal('dlg-login')">取消</button>
+      </div>
+    </div>
+    <p id="dlg-login-msg" class="hint"></p>
+  </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div id="dlg-settings" class="modal-overlay hidden">
+  <div class="modal-content">
+    <h3>设置</h3>
+    <div id="settings-form-inner"></div>
+    <div class="dlg-buttons">
+      <button class="btn-secondary" onclick="closeModal('dlg-settings')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 历史弹窗 -->
+<div id="dlg-history" class="modal-overlay hidden">
+  <div class="modal-content">
+    <h3>领取历史</h3>
+    <div id="history-list-inner"></div>
+    <div class="dlg-buttons">
+      <button class="btn-secondary" onclick="closeModal('dlg-history')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 领取日志弹窗 -->
+<div id="dlg-log" class="modal-overlay hidden">
+  <div class="modal-content modal-log">
+    <h3>领取日志</h3>
+    <div id="log-entries"></div>
+    <div class="dlg-buttons">
+      <button class="btn-secondary" onclick="closeModal('dlg-log')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认弹窗 -->
+<div id="dlg-confirm" class="modal-overlay hidden">
+  <div class="modal-content modal-sm">
+    <p id="confirm-msg"></p>
+    <div class="dlg-buttons">
+      <button class="btn-primary" id="btn-confirm-ok">确认</button>
+      <button class="btn-secondary" id="btn-confirm-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast-container"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
