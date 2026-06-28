@@ -270,6 +270,38 @@ button .ripple {
 .form-group input { width: 100%; }
 .form-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
+/* ── Settings modal ──────────────────────────────── */
+.modal-settings { max-width: 520px; }
+
+/* ── Schedule section ───────────────────────────── */
+.schedule-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.schedule-section .section-title { font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-bottom: 10px; }
+
+.schedule-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.schedule-row label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.schedule-row .toggle-switch { flex-shrink: 0; }
+
+/* Radio group for method selection */
+.radio-group { display: flex; flex-direction: column; gap: 6px; }
+.radio-item { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 10px; border-radius: var(--radius-sm); transition: background 0.15s; }
+.radio-item:hover { background: rgba(255,255,255,0.03); }
+.radio-item input[type="radio"] { display: none; }
+.radio-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color 0.15s; }
+.radio-dot::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); transform: scale(0); transition: transform 0.15s; }
+.radio-item input:checked + .radio-dot { border-color: var(--amber); }
+.radio-item input:checked + .radio-dot::after { transform: scale(1); }
+.radio-label { font-size: 13px; color: var(--text); }
+.radio-hint { font-size: 11px; color: var(--muted); }
+
+/* Service status */
+.service-status { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); margin-top: 8px; background: rgba(255,255,255,0.02); }
+.service-status .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.service-status .status-dot.on { background: var(--sage); box-shadow: 0 0 6px var(--sage-dim); }
+.service-status .status-dot.off { background: var(--muted); }
+.service-status .status-text { font-size: 12px; color: var(--text-secondary); flex: 1; }
+.service-status .status-text strong { color: var(--text); }
+.service-btn { font-size: 12px; padding: 4px 12px; }
+
 /* ── History ─────────────────────────────────────── */
 .history-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
 .history-item:last-child { border-bottom: none; }

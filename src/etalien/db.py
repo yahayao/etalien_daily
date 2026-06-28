@@ -62,6 +62,8 @@ def init_db(db_path: str | None = None) -> None:
             ("request_interval", "1.0"),
             ("max_rounds", "21"),
             ("schedule_time", "08:00"),
+            ("schedule_enabled", "false"),
+            ("schedule_method", "schtasks"),
         ]
         for key, value in defaults:
             conn.execute(
@@ -306,6 +308,8 @@ _DEFAULT_SETTINGS = {
     "request_interval": "1.0",
     "max_rounds": "21",
     "schedule_time": "08:00",
+    "schedule_enabled": "false",
+    "schedule_method": "schtasks",
 }
 
 _SETTINGS_VALIDATORS = {
@@ -313,6 +317,8 @@ _SETTINGS_VALIDATORS = {
     "request_interval": lambda v: max(0.1, min(30.0, float(v))),
     "max_rounds": lambda v: max(1, min(200, int(v))),
     "schedule_time": lambda v: str(v),
+    "schedule_enabled": lambda v: "true" if str(v).lower() in ("true", "1", "yes") else "false",
+    "schedule_method": lambda v: v if str(v) in ("schtasks", "service") else "schtasks",
 }
 
 
@@ -332,6 +338,8 @@ def get_settings(db_path: str | None = None) -> dict[str, Any]:
             result["request_interval"] = float(result["request_interval"])
         if "max_rounds" in result:
             result["max_rounds"] = int(result["max_rounds"])
+        if "schedule_enabled" in result:
+            result["schedule_enabled"] = result["schedule_enabled"] == "true"
 
         return result
     finally:
@@ -340,7 +348,7 @@ def get_settings(db_path: str | None = None) -> dict[str, Any]:
 
 def update_settings(db_path: str | None = None, **kwargs) -> bool:
     """更新设置（部分更新），自动验证范围。"""
-    allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time"}
+    allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time", "schedule_enabled", "schedule_method"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return False

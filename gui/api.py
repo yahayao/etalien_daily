@@ -312,12 +312,21 @@ def create_app() -> Flask:
     @app.route("/api/settings", methods=["PUT"])
     def settings_update():
         data = request.get_json(silent=True) or {}
-        allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time"}
+        allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time",
+                   "schedule_enabled", "schedule_method"}
         fields = {k: v for k, v in data.items() if k in allowed}
         if not fields:
             return jsonify({"error": "没有可更新的字段"}), 400
         update_settings(**fields)
-        return jsonify(get_settings())
+
+        # 保存后同步定时机制
+        settings = get_settings()
+        if settings.get("schedule_enabled") and settings.get("schedule_method") == "schtasks":
+            _ensure_schtask(settings.get("schedule_time", "08:00"))
+        elif not settings.get("schedule_enabled"):
+            _remove_schtask()
+
+        return jsonify(settings)
 
     # ── 定时任务 ────────────────────────────────────────────
 
@@ -327,6 +336,40 @@ def create_app() -> Flask:
         if getattr(sys, "frozen", False):
             return sys.executable
         return sys.executable  # Python 解释器路径
+
+    def _get_schtask_cmd() -> str:
+        """构建 schtasks 要执行的命令行。"""
+        exe_path = _get_exe_path()
+        if getattr(sys, "frozen", False):
+            return f'"{exe_path}" --cli --auto-close'
+        else:
+            main_py = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "src", "etalien", "main.py",
+            )
+            return f'"{sys.executable}" "{main_py}" --auto-close'
+
+    def _ensure_schtask(schedule_time: str) -> None:
+        """创建或更新 Windows 计划任务。"""
+        try:
+            cmd = _get_schtask_cmd()
+            subprocess.run([
+                "schtasks", "/create", "/tn", TASK_NAME,
+                "/tr", cmd,
+                "/sc", "daily", "/st", schedule_time, "/f",
+            ], capture_output=True, text=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    def _remove_schtask() -> None:
+        """删除 Windows 计划任务。"""
+        try:
+            subprocess.run(
+                ["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
+                capture_output=True, text=True,
+            )
+        except FileNotFoundError:
+            pass
 
     @app.route("/api/schedule", methods=["GET"])
     def schedule_get():
@@ -345,19 +388,10 @@ def create_app() -> Flask:
     @app.route("/api/schedule", methods=["POST"])
     def schedule_create():
         data = request.get_json(silent=True) or {}
-        schedule_time = data.get("time", "08:00")
-
-        exe_path = _get_exe_path()
-        if getattr(sys, "frozen", False):
-            cmd = f'"{exe_path}" --cli --auto-close'
-        else:
-            main_py = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                "src", "etalien", "main.py",
-            )
-            cmd = f'"{sys.executable}" "{main_py}"'
+        schedule_time = data.get("schedule_time") or data.get("time", "08:00")
 
         try:
+            cmd = _get_schtask_cmd()
             subprocess.run([
                 "schtasks", "/create", "/tn", TASK_NAME,
                 "/tr", cmd,
@@ -379,6 +413,112 @@ def create_app() -> Flask:
             return jsonify({"ok": True})
         except subprocess.CalledProcessError as e:
             return jsonify({"error": e.stderr.strip()}), 500
+        except FileNotFoundError:
+            return jsonify({"ok": True})
+
+    # ── 定时服务状态 ─────────────────────────────────────
+
+    SERVICE_NAME = "EtAlienDaily"
+
+    @app.route("/api/schedule/status", methods=["GET"])
+    def schedule_status():
+        """综合查询定时任务状态（schtasks + Windows Service）。"""
+        result = {
+            "schtasks": False,
+            "service_installed": False,
+            "service_running": False,
+        }
+
+        # 检查 schtasks
+        try:
+            r = subprocess.run(
+                ["schtasks", "/query", "/tn", TASK_NAME],
+                capture_output=True, text=True,
+            )
+            result["schtasks"] = r.returncode == 0
+        except FileNotFoundError:
+            pass
+
+        # 检查 Windows Service
+        try:
+            r = subprocess.run(
+                ["sc", "query", SERVICE_NAME],
+                capture_output=True, text=True,
+            )
+            if r.returncode == 0:
+                result["service_installed"] = True
+                result["service_running"] = "RUNNING" in r.stdout
+        except FileNotFoundError:
+            pass
+
+        return jsonify(result)
+
+    # ── Windows Service 安装/卸载 ──────────────────────────
+
+    @app.route("/api/schedule/install-service", methods=["POST"])
+    def install_service():
+        """安装 Windows 服务（需要管理员权限）。"""
+        exe_path = _get_exe_path()
+        if not getattr(sys, "frozen", False):
+            return jsonify({
+                "error": "请先打包为 EXE 后再安装服务",
+                "hint": "运行 uv run python build.py 打包",
+            }), 400
+
+        try:
+            # 先检查是否已安装
+            r = subprocess.run(
+                ["sc", "query", SERVICE_NAME],
+                capture_output=True, text=True,
+            )
+            if r.returncode == 0:
+                # 已安装，先停止再删除
+                subprocess.run(
+                    ["sc", "stop", SERVICE_NAME],
+                    capture_output=True, text=True,
+                )
+                subprocess.run(
+                    ["sc", "delete", SERVICE_NAME],
+                    capture_output=True, text=True,
+                )
+                import time
+                time.sleep(1)
+
+            result = subprocess.run([
+                "sc", "create", SERVICE_NAME,
+                "binPath=", f'"{exe_path}" --service',
+                "start=", "auto",
+                "DisplayName=", "ET Alien Daily Claim Service",
+            ], capture_output=True, text=True)
+
+            if result.returncode != 0:
+                return jsonify({"error": result.stderr.strip()}), 500
+
+            # 启动服务
+            subprocess.run(
+                ["sc", "start", SERVICE_NAME],
+                capture_output=True, text=True,
+            )
+
+            return jsonify({"ok": True})
+        except FileNotFoundError:
+            return jsonify({"error": "sc 不可用（非 Windows 系统）"}), 500
+
+    @app.route("/api/schedule/uninstall-service", methods=["DELETE"])
+    def uninstall_service():
+        """卸载 Windows 服务。"""
+        try:
+            subprocess.run(
+                ["sc", "stop", SERVICE_NAME],
+                capture_output=True, text=True,
+            )
+            result = subprocess.run(
+                ["sc", "delete", SERVICE_NAME],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                return jsonify({"error": result.stderr.strip()}), 500
+            return jsonify({"ok": True})
         except FileNotFoundError:
             return jsonify({"ok": True})
 

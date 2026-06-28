@@ -369,24 +369,139 @@ function renderClaimResults(entries) {
 }
 
 // ── Settings ────────────────────────────────────────────────
+let _schedStatus = { schtasks: false, service_installed: false, service_running: false };
+
 async function showSettings() {
   try {
     const s = await api('/api/settings');
-    document.getElementById('settings-form-inner').innerHTML =
-      '<div class="form-group"><label>最大并发数 (1-50)</label><input id="set-concurrent" type="number" min="1" max="50" value="' + s.max_concurrent + '"><div class="form-hint">同时领取的账号数量</div></div>' +
-      '<div class="form-group"><label>请求间隔 秒 (0.1-30)</label><input id="set-interval" type="number" min="0.1" max="30" step="0.1" value="' + s.request_interval + '"></div>' +
-      '<div class="form-group"><label>最大轮数 (1-200)</label><input id="set-rounds" type="number" min="1" max="200" value="' + s.max_rounds + '"></div>' +
-      '<div class="form-group"><label>定时时间</label><input id="set-schedule" type="text" value="' + escapeHtml(s.schedule_time) + '" placeholder="HH:MM"></div>' +
-      '<button class="btn-primary" onclick="saveSettings()">保存设置</button>';
+    const enabled = s.schedule_enabled ? 'checked' : '';
+    const methodSchtasks = s.schedule_method !== 'service' ? 'checked' : '';
+    const methodService = s.schedule_method === 'service' ? 'checked' : '';
+
+    var html = '';
+    // 基本设置
+    html += '<div class="form-group"><label>最大并发数 (1-50)</label><input id="set-concurrent" type="number" min="1" max="50" value="' + s.max_concurrent + '"><div class="form-hint">同时领取的账号数量</div></div>';
+    html += '<div class="form-group"><label>请求间隔 秒 (0.1-30)</label><input id="set-interval" type="number" min="0.1" max="30" step="0.1" value="' + s.request_interval + '"></div>';
+    html += '<div class="form-group"><label>最大轮数 (1-200)</label><input id="set-rounds" type="number" min="1" max="200" value="' + s.max_rounds + '"></div>';
+
+    // 定时领取区域
+    html += '<div class="schedule-section">';
+    html += '<div class="section-title">定时领取</div>';
+
+    // 开关
+    html += '<div class="schedule-row"><label>启用定时领取</label><label class="toggle-switch"><input type="checkbox" id="set-schedule-enabled" onchange="toggleScheduleUI()" ' + enabled + '><span class="toggle-slider"></span></label></div>';
+
+    // 定时时间 (根据开关显示/隐藏)
+    html += '<div id="schedule-detail-area" style="' + (s.schedule_enabled ? '' : 'display:none') + '">';
+    html += '<div class="form-group"><label>定时时间</label><input id="set-schedule-time" type="text" value="' + escapeHtml(s.schedule_time) + '" placeholder="HH:MM"></div>';
+
+    // 实现方式
+    html += '<div class="form-group"><label>实现方式</label>';
+    html += '<div class="radio-group">';
+    html += '<label class="radio-item"><input type="radio" name="schedule-method" value="schtasks" onchange="toggleMethodUI()" ' + methodSchtasks + '><span class="radio-dot"></span><div><span class="radio-label">任务计划程序</span><div class="radio-hint">默认，无需安装，系统原生支持</div></div></label>';
+    html += '<label class="radio-item"><input type="radio" name="schedule-method" value="service" onchange="toggleMethodUI()" ' + methodService + '><span class="radio-dot"></span><div><span class="radio-label">Windows 服务</span><div class="radio-hint">更稳定，services.msc 中可见，需安装</div></div></label>';
+    html += '</div></div>';
+
+    // 服务状态 & 安装/卸载按钮
+    html += '<div id="service-status-area" style="' + (s.schedule_method === 'service' ? '' : 'display:none') + '">';
+    html += '<div id="service-status-inner"><span class="hint">加载中...</span></div>';
+    html += '</div>';
+
+    html += '</div>'; // end schedule-detail-area
+    html += '</div>'; // end schedule-section
+
+    html += '<button class="btn-primary" style="margin-top:12px" onclick="saveSettings()">保存设置</button>';
+
+    document.getElementById('settings-form-inner').innerHTML = html;
     showModal('dlg-settings');
+
+    // 异步加载状态
+    loadScheduleStatus();
   } catch (e) { toast(e.message, 'error'); }
 }
+
+async function loadScheduleStatus() {
+  try {
+    _schedStatus = await api('/api/schedule/status');
+    renderServiceStatus();
+  } catch (_) {
+    _schedStatus = { schtasks: false, service_installed: false, service_running: false };
+    renderServiceStatus();
+  }
+}
+
+function renderServiceStatus() {
+  var el = document.getElementById('service-status-inner');
+  if (!el) return;
+  var s = _schedStatus;
+  var html = '';
+  if (s.service_installed) {
+    var running = s.service_running;
+    html += '<div class="service-status">';
+    html += '<span class="status-dot ' + (running ? 'on' : 'off') + '"></span>';
+    html += '<span class="status-text">服务已安装' + (running ? '，<strong>运行中</strong>' : '，已停止') + '</span>';
+    html += '<button class="btn-red service-btn" onclick="uninstallService()">卸载服务</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="service-status">';
+    html += '<span class="status-dot off"></span>';
+    html += '<span class="status-text">服务未安装</span>';
+    html += '<button class="btn-gold service-btn" onclick="installService()">安装定时服务</button>';
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function toggleScheduleUI() {
+  var on = document.getElementById('set-schedule-enabled').checked;
+  var detail = document.getElementById('schedule-detail-area');
+  if (on) {
+    detail.style.display = '';
+  } else {
+    detail.style.display = 'none';
+  }
+}
+
+function toggleMethodUI() {
+  var method = document.querySelector('input[name="schedule-method"]:checked');
+  var svc = document.getElementById('service-status-area');
+  if (method && method.value === 'service') {
+    svc.style.display = '';
+    loadScheduleStatus();
+  } else {
+    svc.style.display = 'none';
+  }
+}
+
+async function installService() {
+  try {
+    var data = await api('/api/schedule/install-service', { method: 'POST' });
+    toast('定时服务已安装并启动', 'success');
+    loadScheduleStatus();
+  } catch (e) {
+    toast('安装失败: ' + e.message + '（可能需要管理员权限）', 'error');
+  }
+}
+
+async function uninstallService() {
+  if (!(await showConfirm('确认卸载定时服务？卸载后可在设置中重新安装。'))) return;
+  try {
+    await api('/api/schedule/uninstall-service', { method: 'DELETE' });
+    toast('定时服务已卸载', 'success');
+    loadScheduleStatus();
+  } catch (e) { toast('卸载失败: ' + e.message, 'error'); }
+}
+
 async function saveSettings() {
-  const data = {
+  var scheduleEnabled = document.getElementById('set-schedule-enabled');
+  var methodRadio = document.querySelector('input[name="schedule-method"]:checked');
+  var data = {
     max_concurrent: parseInt(document.getElementById('set-concurrent').value) || 10,
     request_interval: parseFloat(document.getElementById('set-interval').value) || 1.0,
     max_rounds: parseInt(document.getElementById('set-rounds').value) || 21,
-    schedule_time: document.getElementById('set-schedule').value || '08:00',
+    schedule_time: document.getElementById('set-schedule-time').value || '08:00',
+    schedule_enabled: scheduleEnabled ? scheduleEnabled.checked : false,
+    schedule_method: methodRadio ? methodRadio.value : 'schtasks',
   };
   if (data.max_concurrent / data.request_interval > 50) {
     if (!(await showConfirm('请求频率较高，可能触发风控。确认继续？'))) return;

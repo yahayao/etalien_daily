@@ -142,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
 # ── 主入口 ────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> None:
+    # --service 模式：作为 Windows 服务运行
+    if argv is None:
+        argv = sys.argv[1:]
+    if "--service" in (argv or []):
+        from etalien.service_wrapper import run_service
+        run_service()
+        return
+
     parser = build_parser()
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
@@ -428,7 +436,7 @@ def _cmd_settings_set(args: argparse.Namespace) -> None:
     key = args.key
     value = args.value
 
-    allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time"}
+    allowed = {"max_concurrent", "request_interval", "max_rounds", "schedule_time", "schedule_enabled", "schedule_method"}
     if key not in allowed:
         print(f"错误: 未知设置项 '{key}'，允许: {', '.join(sorted(allowed))}")
         sys.exit(1)
