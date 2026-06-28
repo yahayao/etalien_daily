@@ -2,7 +2,7 @@
 
 a = Analysis(
     ['gui/app.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=[],
     datas=[
         ('gui/static', 'gui/static'),
@@ -52,5 +52,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='logo/logo.png',
 )

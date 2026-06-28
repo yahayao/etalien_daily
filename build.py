@@ -18,7 +18,7 @@ def main():
         check=True,
     )
 
-    print("\n打包完成: dist/etalien-daily/")
+    print("\nBuild complete: dist/etalien-daily.exe")
 
 
 if __name__ == "__main__":
