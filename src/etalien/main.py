@@ -89,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="完成后自动关闭，不等待回车（用于定时任务）",
     )
     parser.add_argument(
+        "--scheduled",
+        action="store_true",
+        help="定时任务模式：静默运行所有已启用账号，完成后自动退出",
+    )
+    parser.add_argument(
         "--account",
         type=str,
         default=None,
@@ -153,6 +158,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
+
+    if args.scheduled:
+        args.auto_close = True
+        args.account = None
 
     init_db()
 

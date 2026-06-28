@@ -28,10 +28,16 @@ jobs:
       - name: Build with PyInstaller
         run: uv run python build.py
 
-      - name: Archive dist
+      - name: Prepare release directory
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/etalien-daily.exe -DestinationPath etalien-daily-windows-x64.zip
+          New-Item -ItemType Directory -Force release/etalien-daily-windows-x64/config
+          Copy-Item dist/etalien-daily.exe release/etalien-daily-windows-x64/etalien-daily.exe
+
+      - name: Archive release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path release/etalien-daily-windows-x64 -DestinationPath etalien-daily-windows-x64.zip -Force
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2

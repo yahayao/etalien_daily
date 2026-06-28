@@ -10,6 +10,7 @@
 
 import os
 import sqlite3
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -30,10 +31,13 @@ def get_db_path() -> str:
     """获取数据库文件路径，确保目录存在。"""
     if "ETALIEN_CONFIG_DIR" in os.environ:
         config_dir = os.environ["ETALIEN_CONFIG_DIR"]
+    elif getattr(sys, "frozen", False):
+        # PyInstaller 打包后：使用 EXE 同级目录下的 config/
+        config_dir = os.path.join(os.path.dirname(sys.executable), "config")
     elif _DEFAULT_CONFIG_DIR:
         config_dir = _DEFAULT_CONFIG_DIR
     else:
-        # 项目根目录下的 config/
+        # 开发环境：使用项目根目录下的 config/
         config_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "config",

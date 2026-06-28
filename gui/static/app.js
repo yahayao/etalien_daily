@@ -398,7 +398,7 @@ async function showSettings() {
     // 实现方式
     html += '<div class="form-group"><label>实现方式</label>';
     html += '<div class="radio-group">';
-    html += '<label class="radio-item"><input type="radio" name="schedule-method" value="schtasks" onchange="toggleMethodUI()" ' + methodSchtasks + '><span class="radio-dot"></span><div><span class="radio-label">任务计划程序</span><div class="radio-hint">默认，无需安装，系统原生支持</div></div></label>';
+    html += '<label class="radio-item"><input type="radio" name="schedule-method" value="schtasks" onchange="toggleMethodUI()" ' + methodSchtasks + '><span class="radio-dot"></span><div><span class="radio-label">任务计划程序</span><div class="radio-hint">到点后自动领取所有已启用账号，不弹出窗口</div></div></label>';
     html += '<label class="radio-item"><input type="radio" name="schedule-method" value="service" onchange="toggleMethodUI()" ' + methodService + '><span class="radio-dot"></span><div><span class="radio-label">Windows 服务</span><div class="radio-hint">更稳定，services.msc 中可见，需安装</div></div></label>';
     html += '</div></div>';
 

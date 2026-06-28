@@ -234,14 +234,22 @@ def main() -> None:
 
 def _run_cli() -> None:
     """--cli 模式: 转发到 CLI 入口。"""
-    import ctypes
+    scheduled = "--scheduled" in sys.argv
+    auto_close = "--auto-close" in sys.argv
+    silent = scheduled or auto_close
 
-    if sys.platform == "win32":
-        # 分配控制台
+    if sys.platform == "win32" and not silent:
+        import ctypes
         ctypes.windll.kernel32.AllocConsole()
         sys.stdin = open("CONIN$", "r")
         sys.stdout = open("CONOUT$", "w")
         sys.stderr = open("CONOUT$", "w")
+    elif silent:
+        # 静默模式：不弹控制台，stdout/stderr 重定向到 devnull
+        if sys.stdout is None:
+            sys.stdout = open(os.devnull, "w")
+        if sys.stderr is None:
+            sys.stderr = open(os.devnull, "w")
 
     from etalien.main import main as cli_main
     cli_argv = [a for a in sys.argv[1:] if a != "--cli"]

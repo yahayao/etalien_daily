@@ -341,13 +341,13 @@ def create_app() -> Flask:
         """构建 schtasks 要执行的命令行。"""
         exe_path = _get_exe_path()
         if getattr(sys, "frozen", False):
-            return f'"{exe_path}" --cli --auto-close'
+            return f'"{exe_path}" --cli --scheduled'
         else:
             main_py = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                 "src", "etalien", "main.py",
             )
-            return f'"{sys.executable}" "{main_py}" --auto-close'
+            return f'"{sys.executable}" "{main_py}" --scheduled'
 
     def _ensure_schtask(schedule_time: str) -> None:
         """创建或更新 Windows 计划任务。"""

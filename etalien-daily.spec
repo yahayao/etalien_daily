@@ -22,6 +22,7 @@ a = Analysis(
         'etalien.main',
         'gui.api',
         'gui',
+        'etalien.service_wrapper',
     ],
     hookspath=[],
     hooksconfig={},
